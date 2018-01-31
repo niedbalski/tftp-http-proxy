@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"log"
 	"net/http"
 	"time"
@@ -12,6 +13,8 @@ import (
 
 const httpBaseUrlDefault = "http://127.0.0.1/tftp"
 const tftpTimeoutDefault = 5 * time.Second
+const logPathDefault = "tftp-to-http-proxy.log"
+const tftpBindAddrDefault = "0.0.0.0:69"
 
 var globalState = struct {
 	httpBaseUrl	string
@@ -69,16 +72,28 @@ func tftpReadHandler(filename string, rf io.ReaderFrom) error {
 func main() {
 	httpBaseUrlPtr := flag.String("http-base-url", httpBaseUrlDefault, "HTTP base URL")
 	tftpTimeoutPtr := flag.Duration("tftp-timeout", tftpTimeoutDefault, "TFTP timeout")
+	logPathPtr := flag.String("log-path", logPathDefault, "Log Path")
+	bindAddrPtr := flag.String("tftp-bind-address", tftpBindAddrDefault, "TFTP addr to bind to")
 
 	flag.Parse()
 
 	globalState.httpBaseUrl = *httpBaseUrlPtr
 	globalState.httpClient = &http.Client{}
 
+	logFile, err := os.Create(*logPathPtr)
+	if err != nil {
+		log.Panicln(err)
+	}
+
+	defer logFile.Close()
+	log.SetOutput(logFile)
+
 	s := tftp.NewServer(tftpReadHandler, nil)
 	s.SetTimeout(*tftpTimeoutPtr)
-	err := s.ListenAndServe(":69")
+	log.Printf("Listening TFTP requests on: %s", *bindAddrPtr)
+	err = s.ListenAndServe(*bindAddrPtr)
 	if err != nil {
-		log.Fatalf("FATAL: tftp server: %v\n", err)
+		log.Panicf("FATAL: tftp server: %v\n", err)
 	}
+
 }
